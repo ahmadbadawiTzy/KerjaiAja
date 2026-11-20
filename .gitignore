@@ -1,0 +1,83 @@
+# ==============================================================================
+# KerjaiAja - Android Native (Kotlin) .gitignore
+# ==============================================================================
+
+# Built application files & packages
+*.apk
+*.aab
+*.aar
+*.ap_
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated build output directories
+bin/
+build/
+out/
+*/build/
+*/*/build/
+
+# Gradle files and caches
+.gradle/
+buildOutputCleanup/
+gradle-app.setting
+!gradle-wrapper.jar
+
+# Local Android SDK and environment configuration
+local.properties
+
+# Secrets, API keys, credentials, and keystores
+secrets.properties
+google-services.json
+supabase.properties
+*.keystore
+*.jks
+*.p12
+*.key
+signing.properties
+
+# Android Studio / IntelliJ IDEA project files
+.idea/
+*.iml
+*.iws
+*.ipr
+.navigation/
+.externalNativeBuild/
+.cxx/
+
+# VS Code
+.vscode/
+
+# OS-specific temporary files
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+*.swp
+*~
+
+# Profiling and performance traces
+*.hprof
+captures/
+
+# ==============================================================================
+# Local AI & Machine Learning Assets (Do NOT commit large weights)
+# ==============================================================================
+*.bin
+*.tflite
+*.onnx
+*.gguf
+*.safetensors
+*.pt
+*.engine
+.litert/
+models/
+downloaded_models/
+model_cache/
+assets/models/*.bin
+assets/models/*.tflite
+assets/models/*.task
