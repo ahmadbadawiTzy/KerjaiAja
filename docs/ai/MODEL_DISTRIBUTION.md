@@ -1,6 +1,8 @@
-# Distribusi & Manajemen Model AI (Model Distribution) — KerjaiAja
+# Distribusi & Manajemen Model AI (Model Distribution) — KerjaiAja [SUPERSEDED]
 
-Dokumen ini menetapkan strategi pengunduhan on-demand, validasi keamanan, dan pengelolaan siklus hidup berkas model AI lokal pada **KerjaiAja**.
+> [!WARNING]
+> **STATUS ARSITEKTUR: SUPERSEDED (DIGANTIKAN)**  
+> Sesuai [ADR-004: Backend AI Inference Architecture](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-004-BACKEND-AI-INFERENCE.md), mekanisme pengunduhan model biner on-device ke ponsel pengguna tidak lagi digunakan. Komputasi AI dijalankan secara terpusat di Go Backend, sehingga klien Android tidak perlu lagi mengunduh atau menyimpan bobot model biner. Dokumen ini dipertahankan sebagai catatan audit historis.
 
 ---
 
@@ -32,9 +34,10 @@ Integritas berkas model biner sangat kritikal untuk mencegah kegagalan inisialis
 ## 3. Manajemen Siklus Hidup & Penyimpanan Berkas (Model Storage Lifecycle)
 
 ### 3.1 Lokasi Penyimpanan Aman
-- Berkas model disimpan di direktori internal aplikasi:
-  `context.filesDir.resolve("models/gemma3-1b-it-int4.bin")`
+- Berkas model biner disimpan di direktori privat internal aplikasi:
+  `context.filesDir.resolve("models/gemma3-1b-it.litertlm")`
 - Direktori ini bersifat terisolasi (*sandboxed*), tidak dapat diakses atau diubah oleh aplikasi pihak ketiga tanpa hak akses root.
+- **Pengecekan Ruang Penyimpanan:** Sebelum unduhan dimulai, `DeviceCapabilityDetector` wajib memvalidasi ketersediaan ruang penyimpanan internal bebas minimal **2.5 GB** ([ADR-001](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-001-LOCAL-AI-CAPABILITY-DETECTION.md)) untuk menampung berkas unduhan dan ruang buffer runtime.
 
 ### 3.2 Ketahanan Pengunduhan via WorkManager
 - Pengunduhan dijalankan sebagai `CoroutineWorker` di dalam **Android WorkManager**.

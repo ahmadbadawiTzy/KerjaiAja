@@ -69,6 +69,7 @@ captures/
 # ==============================================================================
 *.bin
 *.tflite
+*.litertlm
 *.onnx
 *.gguf
 *.safetensors
@@ -80,4 +81,27 @@ downloaded_models/
 model_cache/
 assets/models/*.bin
 assets/models/*.tflite
+assets/models/*.litertlm
 assets/models/*.task
+
+# Kotlin compiler cache
+.kotlin/
+*.kotlin/
+
+# Web Admin / Node.js
+node_modules/
+.next/
+out/
+web-admin/node_modules/
+web-admin/.next/
+web-admin/out/
+
+# ==============================================================================
+# Environment Secrets & Local Config
+# ==============================================================================
+.env
+.env.*
+!.env.example
+*.env
+
+

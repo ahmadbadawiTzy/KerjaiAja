@@ -1,57 +1,100 @@
 # Strategi Pengujian (Testing Strategy) — KerjaiAja
+## Hybrid Offline-First Testing · Deterministic Engine · OCR & Vision Tests · Subject Benchmarks
 
-Dokumen ini mendefinisikan piramida pengujian otomatis, metodologi pengujian, serta pendekatan verifikasi untuk **KerjaiAja**.
+Dokumen ini mendefinisikan piramida pengujian otomatis, metodologi pengujian, serta pendekatan verifikasi menyeluruh untuk ekosistem **KerjaiAja** pasca-final rebaseline arsitektur hybrid dan integrasi fitur Foto Soal & Pembahasan.
 
 ---
 
-## 1. Piramida Pengujian (Testing Pyramid)
+## 1. Piramida Pengujian Sistem (Android Native Testing Pyramid)
 
 ```text
-         / \
-        / E2E \         ~10% (End-to-End UI & Room Flow)
-       /-------\
-      / Compose \       ~20% (Component & Interaction Tests)
-     /   Widget  \
-    /-------------\
-   /   Unit Tests  \    ~70% (UseCases, ViewModels, DAOs, Parsers)
-  /-----------------\
+          / \
+         / E2E \         ~10% (End-to-End User Flow, Offline Sync Cycle, Supabase BaaS)
+        /-------\
+       / Compose \       ~20% (Compose Widget Tests, Neo-Bauhaus UI, OCR Review Screen)
+      /   Widget  \
+     /-------------\
+    /   Unit Tests  \    ~70% (Deterministic Engine, DeviceCapability, OCR Logic, AnswerValidator, Room)
+   /-----------------\
 ```
 
 ---
 
-## 2. Tingkatan Pengujian (Testing Levels)
+## 2. Rincian Lapisan Pengujian
 
-### 2.1 Unit Tests (Prioritas Tertinggi ~70%)
-- **Target:** Domain UseCases, ViewModels, Data Mappers, JSON Parsers, dan Room DAOs (menggunakan in-memory database).
+### 2.1 Unit Tests Android (~70%)
+- **Target Pengujian:**
+  1. `DeterministicPriorityEngine`: Rumus prioritas (0–100) dan klasifikasi 4 tingkat urgensi (overdue, deadline mendesak, bobot nilai 0–100%).
+  2. `DeviceCapabilityManager`: Evaluasi terpisah untuk `TextCapability` (`BASIC_TEXT`, `FULL_TEXT`, `UNSUPPORTED`) dan `VisionCapability` (`EXPERIMENTAL_QUALIFIED`, `NONE`) serta evaluasi per-model (ADR-035).
+  3. `TaskClassificationRouter`: Klasifikasi deterministik instan vs perutean ke AI tanpa memanggil LLM classifier.
+  4. `ModelLifecycleManager`: Pengujian state transitions (`UNLOADED` -> `LOADING` -> `READY` -> `INFERRING`), proteksi single active session `Mutex`, idle auto-unload 5 menit, dan timeout 15 detik.
+  5. `SubjectAdaptiveValidator` & `AnswerValidator`:
+     - Verifikasi kelengkapan skema terstruktur 7 bagian.
+     - Verifikasi ekspresi aritmetika dasar secara deterministik (`A [op] B = C`).
+     - Deteksi inkonsistensi satuan SI (misal: Joule, Newton, m/s).
+     - Deteksi ketidakpastian (*uncertaintyFlag*).
+     - Ketahanan parser regex fallback jika JSON rusak.
+  6. `OcrConfidenceEvaluator`:
+     - Evaluasi confidence score per kata dan threshold peringatan ketidakjelasan teks.
+  7. `SyncQueue & ConflictResolver`: Enqueue mutasi lokal, resolusi konflik Last-Write-Wins (LWW), versioning, dan soft-deletion tombstone.
+  8. `LocalRagRetriever & BM25QueryBuilder`: Query FTS5 BM25 dan pemangkasan token budget ($\le 800$ token).
+  9. `ImagePrivacyCleaner`: Memverifikasi bahwa fungsi pembersih cache fisik menghapus file temporer dari disk.
+  10. `Room DAOs`: Pengujian kueri DAO in-memory (`Room.inMemoryDatabaseBuilder`).
+- **Status Unit Test Baseline:** 41 pengujian unit pada scaffold logika inti telah dieksekusi dan tervalidasi lulus 100% (`41 passed in app/src/test/`).
 - **Pustaka Utama:**
-  - `JUnit 5` / `JUnit 4` runner.
-  - `MockK`: Untuk mocking dependensi antarmuka.
-  - `Turbine`: Untuk menguji emisi Kotlin `Flow` dan `StateFlow` secara deterministik.
-  - `kotlinx-coroutines-test`: Untuk memanipulasi waktu virtual (`StandardTestDispatcher`, `runTest`).
-- **Prinsip:** Unit test harus berjalan sangat cepat (< 30 detik untuk seluruh suite) tanpa memerlukan emulator atau perangkat fisik Android.
+  - `JUnit 4` / `JUnit 5` test runner.
+  - `MockK`: Mocking repositori dan interface.
+  - `Turbine`: Pengujian emisi Kotlin `Flow` reaktif.
+  - `kotlinx-coroutines-test`: Pengujian asinkron via `runTest`.
 
-### 2.2 Compose Widget & UI Tests (~20%)
-- **Target:** Memvalidasi rendering antarmuka, penanganan state kosong (*empty states*), dan respon interaksi pengguna (klik tombol, input teks, scroll).
-- **Pustaka Utama:**
-  - `createComposeRule()` dari `androidx.compose.ui.test`.
-  - Menguji komponen individual dalam isolasi (*Component-Level Testing*).
+### 2.2 Compose Widget & Interaction Tests (~20%)
+- **Target Pengujian:**
+  - Rendering komponen Neo-Bauhaus (`BauhausTaskCard`, `BauhausPriorityPill`, `BauhausButton`).
+  - Adaptabilitas Dual Experience: Memastikan UI Mode A tetap bersih dan fungsional tanpa tombol AI error jika perangkat `UNSUPPORTED`.
+  - **Layar Review OCR (Human-in-the-Loop)**:
+    - Input teks dapat diedit di `OutlinedTextField`.
+    - Toolbar simbol akademik menyisipkan karakter matematika dengan benar.
+    - Selector 12 Rumpun Mata Pelajaran memilih chip yang tepat.
+  - Layar Pembahasan Soal: Menampilkan 7 bagian solusi dengan benar dan rendering formula LaTeX/teks.
+- **Pustaka Utama:** `createComposeRule()` dari `androidx.compose.ui.test`.
 
-### 2.3 End-to-End & Integration Tests (~10%)
-- **Target:** Alur kritis pengguna dari ujung ke ujung:
-  - Membuat mata kuliah baru ➡️ Menambahkan tugas ➡️ Melakukan breakdown manual ➡️ Menandai checklist selesai.
-- **Pustaka Utama:** AndroidX Test Runner pada emulator CI.
+### 2.3 Integration, Sync & BaaS Tests (~10%)
+- **Target Pengujian:**
+  - **Offline-First Sync Cycle:** Memverifikasi alur mutasi lokal -> `sync_pending_queue` -> mock PostgREST client -> update status sync.
+  - **Zero Image Upload Verification:** Memastikan selama proses foto soal berlangsung, tidak ada panggilan jaringan apa pun ke endpoint Supabase Storage.
+  - **Guest to Cloud Migration:** Memverifikasi transaksi atomic Room saat mengubah `userId` dari guest ke UID Supabase.
+  - **FTS5 Triggers:** Memverifikasi sinkronisasi otomatis antara tabel `tasks` dan `tasks_fts` saat insert, update, dan soft-delete.
+  - **Supabase Realtime Simulation:** Memverifikasi konsumsi event WebSocket CDC untuk tugas kelompok tim.
 
 ---
 
-## 3. Strategi Pengujian Khusus Local AI Engine
+## 3. Suite Pengujian Khusus Fitur Foto Soal & Pembahasan
 
-Pengujian model kecerdasan buatan lokal memerlukan pendekatan khusus karena bobot biner dan inferensi on-device bersifat *non-deterministik* dan membutuhkan sumber daya komputasi besar:
+### A. Answer Validator Test Suite
+```kotlin
+@Test
+fun `validator fails when final answer is blank`() {
+    val invalidSolution = StructuredSolution(
+        questionIdentification = "Hitung kecepatan",
+        givenInformation = listOf("s = 100 m", "t = 10 s"),
+        questionTarget = "Kecepatan v",
+        conceptsAndFormulas = listOf("v = s / t"),
+        stepByStepSolution = listOf("v = 100 / 10 = 10 m/s"),
+        finalAnswer = "", // KOSONG -> INVALID
+        verificationAndCheck = "Pemeriksaan dimensi konsisten"
+    )
+    assertFalse(invalidSolution.isValid())
+}
 
-1. **Abstraksi `FakeAiEngine` untuk CI/CD:**  
-   Selama pengujian unit dan otomatisasi CI/CD, implementasi `AiEngine` nyata digantikan oleh `FakeAiEngine` yang mengembalikan respons JSON deterministik tanpa memuat berkas bobot model atau runtime `LiteRT-LM`.
-2. **Uji Validitas Parsing JSON:**  
-   Dataset fixture berisi 50+ variasi keluaran mentah model LLM (termasuk skenario teks terpotong, format salah, atau markdown formatting) diuji terhadap parser data untuk memastikan aplikasi tidak pernah crash saat menghadapi keluaran tak terduga.
-3. **Uji Integritas Hash Checksum:**  
-   Pengujian unit khusus untuk memverifikasi bahwa `ModelDownloader` menolak berkas dengan hash SHA-256 yang tidak sesuai dan berhasil menyetujui berkas dengan hash valid.
-4. **Benchmarking Manual pada Perangkat Fisik:**  
-   Pengujian latensi nyata (TTFT dan TPS) dijalankan terpisah menggunakan instrumentasi benchmark di perangkat fisik nyata.
+@Test
+fun `arithmetic verifier detects calculation discrepancy`() {
+    val step = "Maka hasil kali massa dan percepatan adalah F = 5 * 4 = 25 N"
+    val result = AnswerValidator.verifyStepArithmetic(step)
+    assertFalse(result.isConsistent)
+    assertEquals("5 * 4 = 20", result.suggestedCorrection)
+}
+```
+
+### B. Subject Benchmark Quality Suite
+- Pengujian otomatis berkala terhadap dataset 240 soal pada 12 rumpun mata pelajaran (`docs/quality/SUBJECT_BENCHMARK.md`).
+- Menghasilkan laporan metrik: Akurasi Konsep, Validitas Rumus, Kelengkapan 7 Bagian, dan Kualitas Bahasa.

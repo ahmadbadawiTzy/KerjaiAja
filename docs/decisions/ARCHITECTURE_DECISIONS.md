@@ -1,86 +1,74 @@
 # Catatan Keputusan Arsitektur (Architecture Decision Records) — KerjaiAja
 
-Dokumen ini mencatat keputusan-keputusan arsitektural penting (*ADRs*) yang telah disepakati untuk proyek **KerjaiAja**.
+Dokumen ini adalah **Master Architecture Decision Records (ADR)** proyek **KerjaiAja**. Dokumen ini mencatat seluruh keputusan arsitektural yang disepakati, termasuk penegasan rebaseline arsitektur final (**Final Product & Architecture Rebaseline 2026-11-20**) yang menetapkan **Dual Experience Product (Mode A: Produktivitas Penuh Tanpa AI & Mode B: Asisten Kerja & Foto Soal On-Device Gemma Opsional)**, **Supabase Managed BaaS via Official Kotlin Client (`supabase-kt`)**, **Offline-First Synchronization dengan Room Database**, **Jalur A OCR-First via ML Kit + Gemma Text**, **Jalur B Multimodal Vision Evaluation**, **Zero Custom Backend**, dan **Zero External AI API** dengan target biaya operasional **Rp 0 / $0**.
 
 ---
 
-## ADR-001: Pemilihan Platform Android Native, Kotlin, dan Jetpack Compose
+## 1. Ringkasan Status Keputusan Arsitektur (Architecture Status Summary)
 
-- **Status:** DITERIMA
-- **Konteks:** Proyek membutuhkan antarmuka yang sangat responsif, akses langsung ke akselerasi perangkat keras lokal (GPU/NPU) untuk eksekusi model on-device, serta adopsi sistem desain modern Material 3.
-- **Keputusan:** Mengembangkan aplikasi sebagai **Android Native** murni menggunakan bahasa **Kotlin** dan toolkit deklaratif **Jetpack Compose** dengan **Material 3**.
-- **Konsekuensi Positif:**
-  - Integrasi tanpa hambatan dengan runtime machine learning lokal (C++ bindings via NDK/LiteRT).
-  - Performa rendering grafis optimal dan konsumsi memori terprediksi.
-  - Desain modern adaptif dengan *Dynamic Color* (Material You).
-- **Konsekuensi Negatif:**
-  - Aplikasi terbatas pada ekosistem Android (tidak lintas platform ke iOS/Web pada tahap ini).
-
----
-
-## ADR-002: Penerapan Clean Architecture + Pola MVVM
-
-- **Status:** DITERIMA
-- **Konteks:** Aplikasi memiliki alur logika yang kompleks (manajemen tugas, perhitungan jadwal, alur RAG, dan isolasi AI runtime) yang harus mudah diuji secara independen tanpa ketergantungan pada Android UI lifecycle.
-- **Keputusan:** Menggunakan **Clean Architecture** berlapis (Presentation, Domain, Data) dengan pola **MVVM (Model-View-ViewModel)** di presentation layer.
-- **Konsekuensi Positif:**
-  - Logika bisnis murni di Domain layer dapat diuji dengan Unit Test cepat (~70% cakupan).
-  - Aliran data satu arah (*Unidirectional Data Flow*) mencegah bug desinkronisasi state UI.
-  - Memudahkan penggantian implementasi runtime AI tanpa merusak modul UI.
-- **Konsekuensi Negatif:**
-  - Penambahan boilerplate kelas awal (UseCases, Repositories, Data Mappers).
-
----
-
-## ADR-003: Basis Data Lokal Menggunakan Room Database dan SQLite FTS
-
-- **Status:** DITERIMA
-- **Konteks:** Aplikasi harus mengusung prinsip *Offline-First* dan membutuhkan kemampuan pencarian teks cepat pada materi kuliah untuk menyusun prompt RAG lokal.
-- **Keputusan:** Menggunakan **Room Persistence Library** di atas SQLite lokal dengan aktivasi ekstensi tabel virtual **SQLite FTS (Full-Text Search)**.
-- **Konsekuensi Positif:**
-  - Akses data relasional aman terhadap tipe data (*type-safe*).
-  - Pencarian materi lokal berkecepatan sub-milidetik untuk injeksi konteks AI.
-  - Zero latency jaringan untuk seluruh alur pencatatan tugas.
-- **Konsekuensi Negatif:**
-  - Diperlukan pengelolaan migrasi skema basis data Room yang disiplin saat rilis pembaruan.
-
----
-
-## ADR-004: Adaptive On-Device Local AI Engine (Gemma 3 1B IT + LiteRT-LM)
-
-- **Status:** DITERIMA
-- **Konteks:** Privasi data akademik pelajar sangat sensitif, dan biaya operasional API cloud berkelanjutan tidak diinginkan. Aplikasi membutuhkan model bahasa yang dapat memecah tugas akademik secara terstruktur langsung di ponsel.
-- **Keputusan:** Menggunakan model **Gemma 3 1B IT** yang dijalankan melalui runtime **LiteRT-LM** (Google AI Edge) secara lokal di perangkat dengan arsitektur adaptif (RAM target 4–6 GB, API 29+). Aplikasi inti tetap 100% fungsional tanpa AI jika perangkat tidak mendukung (*graceful fallback*).
-- **Konsekuensi Positif:**
-  - Bebas biaya langganan cloud AI API bagi pengguna maupun pengembang.
-  - Privasi data 100% terjaga di perangkat pengguna.
-  - Kemampuan inferensi tetap berfungsi saat tidak ada sinyal internet.
-- **Konsekuensi Negatif:**
-  - Keterbatasan kapasitas penalaran model 1B parameter dibandingkan model cloud raksasa (mitigasi: rekayasa prompt ketat & RAG lokal).
-  - Perlu perhatian ekstra terhadap konsumsi memori dan suhu perangkat.
+| ID | Judul Keputusan | Status | Tanggal | Dampak Utama |
+| :--- | :--- | :--- | :---: | :--- |
+| **ADR-001** | [Android Native, Kotlin & Jetpack Compose](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-001-ANDROID-NATIVE-JETPACK-COMPOSE.md) | **ACCEPTED** | 2026-11-20 | Client Android murni, MVVM, UDF, M3 Neo-Bauhaus |
+| **ADR-002** | [Go & Gin Modular Monolith Backend](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-002-GO-GIN-MODULAR-MONOLITH.md) | **SUPERSEDED** | 2026-11-20 | Digantikan oleh [ADR-016](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-016-REMOVAL-OF-GO-GIN-BACKEND.md) & [ADR-020](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-020-SUPABASE-MANAGED-BAAS.md) |
+| **ADR-003** | [Supabase Managed Infrastructure](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-003-SUPABASE-MANAGED-INFRASTRUCTURE.md) | **SUPERSEDED** | 2026-11-20 | Diperbarui dan dikonkretkan oleh [ADR-020](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-020-SUPABASE-MANAGED-BAAS.md) |
+| **ADR-004** | [Backend AI Inference Architecture](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-004-BACKEND-AI-INFERENCE.md) | **SUPERSEDED** | 2026-11-20 | Digantikan oleh [ADR-014](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-014-ON-DEVICE-GEMMA-LITERTLM.md) (On-Device Gemma) |
+| **ADR-005** | [Explainable AI & Task Prioritization Formula](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-005-EXPLAINABLE-AI-TASK-PRIORITIZATION.md) | **ACCEPTED** | 2026-11-20 | Formula deterministik 0–100 + AI Contextual Reasoning |
+| **ADR-006** | [Team Collaboration in MVP Scope](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-006-TEAM-COLLABORATION-IN-MVP.md) | **SUPERSEDED** | 2026-11-20 | Digantikan oleh [ADR-026](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-026-TEAM-COLLABORATION-SUPABASE-RLS.md) |
+| **ADR-007** | [Balanced MVP Scope (3 Core Pillars)](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-007-BALANCED-MVP-SCOPE.md) | **ACCEPTED** | 2026-11-20 | Personal + Prioritization + Team Collaboration |
+| **ADR-008** | [Neo-Bauhaus Design Direction](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-008-NEO-BAUHAUS-DESIGN-DIRECTION.md) | **ACCEPTED** | 2026-11-20 | Form follows function, anti-guilt UX, Inter font |
+| **ADR-009** | [Python Batch-Based Fine-Tuning Pipeline](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-009-PYTHON-BATCH-FINE-TUNING.md) | **RETIRED** | 2026-11-20 | Zero AI fine-tuning; model on-device Gemma bobot resmi |
+| **ADR-010** | [Explicit Opt-In Data Governance](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-010-EXPLICIT-OPT-IN-DATA-GOVERNANCE.md) | **ACCEPTED** | 2026-11-20 | Privacy-first, zero external AI sharing, opt-in AI |
+| **ADR-011** | [Play Store Security & Compliance by Design](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-011-PLAY-STORE-SECURITY-COMPLIANCE.md) | **ACCEPTED** | 2026-11-20 | Target SDK 35, Account deletion, minim izin |
+| **ADR-012** | [Free-First Strategy & Cost Policy](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-012-FREE-FIRST-TECH-STRATEGY.md) | **ACCEPTED** | 2026-11-20 | $0 AI API & Rp0 Supabase Free Tier Cost Policy |
+| **ADR-013** | [Self-Hosted AI & Resource-Optimized Evaluation](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-013-SELF-HOSTED-AI-LLAMACPP-QWEN.md) | **SUPERSEDED** | 2026-11-20 | Digantikan oleh [ADR-014](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-014-ON-DEVICE-GEMMA-LITERTLM.md) |
+| **ADR-014** | [On-Device AI via Google Gemma & LiteRT-LM](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-014-ON-DEVICE-GEMMA-LITERTLM.md) | **ACCEPTED** | 2026-11-20 | Gemma 3 1B & 270M on-device via LiteRT-LM |
+| **ADR-015** | [Local RAG with SQLite FTS5 BM25](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-015-LOCAL-RAG-SQLITE-FTS5.md) | **ACCEPTED** | 2026-11-20 | Pencarian leksikal cepat BM25 langsung di Room lokal |
+| **ADR-016** | [Removal of Go/Gin Backend & Zero Server Infra](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-016-REMOVAL-OF-GO-GIN-BACKEND.md) | **ACCEPTED** | 2026-11-20 | Eliminasi total custom server backend |
+| **ADR-017** | [Offline-First Data Architecture & Supabase Descoping](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-017-OFFLINE-FIRST-DATA-ARCHITECTURE-SUPABASE-DESCOPING.md) | **SUPERSEDED** | 2026-11-20 | Digantikan oleh [ADR-020](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-020-SUPABASE-MANAGED-BAAS.md) & [ADR-022](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-022-OFFLINE-FIRST-SYNC-CONFLICT-RESOLUTION.md) |
+| **ADR-018** | [Local Team Workspace & Phased Collaboration](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-018-LOCAL-TEAM-WORKSPACE-PHASED-COLLABORATION.md) | **SUPERSEDED** | 2026-11-20 | Digantikan oleh [ADR-026](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-026-TEAM-COLLABORATION-SUPABASE-RLS.md) |
+| **ADR-019** | [On-Demand Model Download Management](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-019-ON-DEMAND-MODEL-DOWNLOAD-MANAGEMENT.md) | **ACCEPTED** | 2026-11-20 | Bobot model terpisah dari APK, unduhan izin pengguna |
+| **ADR-020** | [Supabase Managed BaaS Integration](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-020-SUPABASE-MANAGED-BAAS.md) | **ACCEPTED** | 2026-11-20 | Official Kotlin client, Auth, Postgres, Realtime, Storage |
+| **ADR-021** | [Guest-First & Optional Cloud Authentication](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-021-GUEST-FIRST-OPTIONAL-AUTH.md) | **ACCEPTED** | 2026-11-20 | Zero-friction onboarding, migrasi data transparan |
+| **ADR-022** | [Offline-First Sync & Conflict Resolution](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-022-OFFLINE-FIRST-SYNC-CONFLICT-RESOLUTION.md) | **ACCEPTED** | 2026-11-20 | Local write first di Room, sync queue, tombstone |
+| **ADR-023** | [Dual Experience Product Architecture](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-023-DUAL-EXPERIENCE-PRODUCT-ARCHITECTURE.md) | **ACCEPTED** | 2026-11-20 | Mode A (100% tanpa AI) & Mode B (Asisten Kerja & Foto Soal Opsional) |
+| **ADR-024** | [Device Capability Management](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-024-DEVICE-CAPABILITY-MANAGEMENT.md) | **ACCEPTED** | 2026-11-20 | Multi-factor RAM/ABI/Thermal/Storage qualification |
+| **ADR-025** | [Asisten Kerja Boundaries & Chatbot Ban](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-025-ASISTEN-KERJA-SPECIFICATION-BOUNDARIES.md) | **ACCEPTED** | 2026-11-20 | Larangan chatbot generik; 5 use-case kontekstual kerja |
+| **ADR-026** | [Team Collaboration via Supabase Realtime & RLS](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-026-TEAM-COLLABORATION-SUPABASE-RLS.md) | **ACCEPTED** | 2026-11-20 | Kolaborasi tim via Postgres CDC Realtime & Row Level Security |
+| **ADR-027** | [Photo Question Solver Specification](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-027-PHOTO-QUESTION-SOLVER-SPECIFICATION.md) | **ACCEPTED** | 2026-11-20 | Fitur Foto Soal & Pembahasan 12 mata pelajaran dengan 7 bagian output |
+| **ADR-028** | [OCR-First Question Processing Architecture](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-028-OCR-FIRST-QUESTION-PROCESSING.md) | **ACCEPTED** | 2026-11-20 | Jalur A: ML Kit Text Recognition on-device + Gemma text model |
+| **ADR-029** | [Separation of Text and Vision Model Capabilities](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-029-SEPARATION-OF-TEXT-AND-VISION-CAPABILITY.md) | **ACCEPTED** | 2026-11-20 | Evaluasi hardware terpisah untuk text model vs multimodal vision model |
+| **ADR-030** | [Multimodal Vision Model Evaluation Strategy](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-030-MULTIMODAL-VISION-MODEL-EVALUATION-STRATEGY.md) | **ACCEPTED** | 2026-11-20 | Jalur B: Gemma 3n E2B sebagai kandidat evaluasi untuk diagram/grafik STEM |
+| **ADR-031** | [Academic Answer Validation and Quality Control](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-031-ACADEMIC-ANSWER-VALIDATION-AND-QUALITY-CONTROL.md) | **ACCEPTED** | 2026-11-20 | Validasi deterministik langkah/rumus, anti halusinasi, uncertainty flag |
+| **ADR-032** | [Image Privacy, Ephemeral Processing & Data Retention](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-032-IMAGE-PRIVACY-EPHEMERAL-PROCESSING-DATA-RETENTION.md) | **ACCEPTED** | 2026-11-20 | Pemrosesan citra efemeral 100% lokal, zero auto-upload, zero AI training |
+| **ADR-033** | [Progressive AI Processing Pipeline](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-033-PROGRESSIVE-AI-PROCESSING-PIPELINE.md) | **ACCEPTED** | 2026-11-20 | Pipeline 7 tahap deterministik-pertama sebelum inferensi AI |
+| **ADR-034** | [On-Device Model Lifecycle & Memory Management](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-034-ON-DEVICE-MODEL-LIFECYCLE-AND-MEMORY-MANAGEMENT.md) | **ACCEPTED** | 2026-11-20 | Lazy load, single active session, timeout 15s, auto-unload 5m, LMK trim |
+| **ADR-035** | [Per-Model and Per-Capability Device Evaluation Gate](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-035-PER-MODEL-DEVICE-CAPABILITY-EVALUATION.md) | **ACCEPTED** | 2026-11-20 | Evaluasi hardware granular per-model dan per-kemampuan, no auto-download |
+| **ADR-036** | [Web Admin CMS Architecture and Technology Stack](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-036-WEB-ADMIN-CMS-ARCHITECTURE.md) | **ACCEPTED** | 2026-11-20 | Next.js 15 App Router, React 19, TypeScript strict, Tailwind, shadcn/ui, Supabase SSR |
+| **ADR-037** | [CMS Role-Based Access Control & Server-Side Security](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-037-CMS-RBAC-AND-SERVER-SIDE-SECURITY.md) | **ACCEPTED** | 2026-11-20 | RBAC 3 tingkat (SUPER_ADMIN, ADMIN, SUPPORT), anti-surveillance, audit logging |
+| **ADR-038** | [Shared Database Schema & Multi-Tenant RLS for CMS](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-038-SHARED-DATABASE-SCHEMA-AND-CMS-RLS.md) | **ACCEPTED** | 2026-11-20 | Satu database Supabase Postgres bersama, delta sync preservation, zero room direct mutation |
+| **ADR-039** | [Two-Tier Knowledge Intelligence Layer Architecture](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-039-TWO-TIER-KNOWLEDGE-INTELLIGENCE-LAYER.md) | **ACCEPTED** | 2026-11-20 | Pemisahan Productivity vs Academic Knowledge, SQLite FTS5 BM25 baseline |
+| **ADR-040** | [Document Ingestion, Intelligent Chunking & Traceability](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-040-DOCUMENT-INGESTION-INTELLIGENT-CHUNKING-TRACEABILITY.md) | **ACCEPTED** | 2026-11-20 | Structure-aware chunking, formula integrity, SHA-256 hash, zero fake citations |
+| **ADR-041** | [Context Engineering, Prompt Injection Defense & Knowledge Sync](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-041-CONTEXT-ENGINEERING-PROMPT-INJECTION-AND-KNOWLEDGE-SYNC.md) | **ACCEPTED** | 2026-11-20 | Token budgeting (800/1200), passive data role, delta sync kurikulum offline-first |
 
 ---
 
-## ADR-005: Pengunduhan Model On-Demand dan Verifikasi Integritas SHA-256
+## 2. Catatan Keputusan yang Telah Digantikan (Superseded & Retired Records)
 
-- **Status:** DITERIMA
-- **Konteks:** Membundel bobot model biner (~600–900 MB) ke dalam berkas APK instalasi awal akan membuat aplikasi terlalu besar dan tidak ramah kuota.
-- **Keputusan:** Mendistribusikan model biner secara **on-demand** terpisah setelah aplikasi terpasang, dengan validasi integritas checksum **SHA-256** wajib sebelum model diaktifkan.
-- **Konsekuensi Positif:**
-  - Ukuran APK awal sangat ramping (< 25 MB).
-  - Mencegah runtime crash akibat berkas model korup atau terpotong saat pengunduhan.
-- **Konsekuensi Negatif:**
-  - Pengguna harus mengunduh data tambahan saat pertama kali mengaktifkan fitur AI.
+1. `ADR-002-GO-GIN-MODULAR-MONOLITH.md` → **SUPERSEDED** oleh [ADR-016](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-016-REMOVAL-OF-GO-GIN-BACKEND.md) & [ADR-020](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-020-SUPABASE-MANAGED-BAAS.md). Seluruh rancangan backend server custom dihapus permanen; digantikan oleh Supabase Managed BaaS langsung dari Android.
+2. `ADR-003-SUPABASE-MANAGED-INFRASTRUCTURE.md` → **SUPERSEDED** oleh [ADR-020](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-020-SUPABASE-MANAGED-BAAS.md).
+3. `ADR-004-BACKEND-AI-INFERENCE.md` & `ADR-013-SELF-HOSTED-AI-LLAMACPP-QWEN.md` → **SUPERSEDED** oleh [ADR-014](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-014-ON-DEVICE-GEMMA-LITERTLM.md). Seluruh inferensi AI dialihkan ke on-device menggunakan Google Gemma dan LiteRT-LM.
+4. `ADR-006-TEAM-COLLABORATION-IN-MVP.md` & `ADR-018-LOCAL-TEAM-WORKSPACE-PHASED-COLLABORATION.md` → **SUPERSEDED** oleh [ADR-026](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-026-TEAM-COLLABORATION-SUPABASE-RLS.md). Kolaborasi kelompok menggunakan sinkronisasi Supabase Realtime WebSocket dan PostgreSQL RLS.
+5. `ADR-017-OFFLINE-FIRST-DATA-ARCHITECTURE-SUPABASE-DESCOPING.md` → **SUPERSEDED** oleh [ADR-020](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-020-SUPABASE-MANAGED-BAAS.md) & [ADR-022](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-022-OFFLINE-FIRST-SYNC-CONFLICT-RESOLUTION.md). Supabase dikembalikan sebagai BaaS cloud opsional dengan tetap mempertahankan arsitektur dasar offline-first Room lokal.
+6. **Keputusan Penggunaan Cloud AI API Eksternal (Gemini / OpenAI / Anthropic / Groq / Hugging Face):** **STRICTLY FORBIDDEN**. Dilarang melakukan panggilan API inferensi jarak jauh ke penyedia mana pun.
 
 ---
 
-## ADR-006: Supabase sebagai Backend Cloud Sinkronisasi Opsional
+## 3. Catatan Berkas Rancangan Pra-Rebaseline yang Dikonsolidasikan (Consolidated Pre-Rebaseline Drafts)
 
-- **Status:** DITERIMA
-- **Konteks:** Pengguna mungkin menginginkan pencadangan data lintas perangkat atau kerja kelompok kolaboratif di masa mendatang, namun sistem tidak boleh bergantung secara wajib pada server.
-- **Keputusan:** Menetapkan **Supabase** (PostgreSQL, Auth, Storage) sebagai backend cloud sekunder yang bersifat **opsional (opt-in)**.
-- **Konsekuensi Positif:**
-  - Arsitektur backend cloud open-source yang hemat biaya, aman dengan Row-Level Security (RLS).
-  - Pemisahan yang bersih antara data lokal offline dan replikasi cloud.
-- **Konsekuensi Negatif:**
-  - Menuntut penanganan logika sinkronisasi dan resolusi konflik data saat mode cloud diaktifkan.
+Sebelum rebaseline kanonikal 41 ADR ditetapkan, terdapat 4 berkas rancangan awal yang membahas topik serupa. Berkas-berkas ini dipertahankan untuk riwayat arsitektur namun statusnya telah dikonsolidasikan penuh:
+
+1. `ADR-001-LOCAL-AI-CAPABILITY-DETECTION.md` → **CONSOLIDATED** ke dalam [ADR-024](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-024-DEVICE-CAPABILITY-MANAGEMENT.md) & [ADR-035](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-035-PER-MODEL-DEVICE-CAPABILITY-EVALUATION.md).
+2. `ADR-002-TASK-BASED-LOCAL-RAG-MVP.md` → **CONSOLIDATED** ke dalam [ADR-015](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-015-LOCAL-RAG-SQLITE-FTS5.md) & [ADR-039](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-039-TWO-TIER-KNOWLEDGE-INTELLIGENCE-LAYER.md).
+3. `ADR-003-STRUCTURED-AI-OUTPUT.md` → **CONSOLIDATED** ke dalam [ADR-027](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-027-PHOTO-QUESTION-SOLVER-SPECIFICATION.md) & [ADR-031](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-031-ACADEMIC-ANSWER-VALIDATION-AND-QUALITY-CONTROL.md).
+4. `ADR-004-ADAPTIVE-AI-SESSION-LIFECYCLE.md` → **CONSOLIDATED** ke dalam [ADR-034](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-034-ON-DEVICE-MODEL-LIFECYCLE-AND-MEMORY-MANAGEMENT.md). (Nomor kanonikal ADR-004 dipegang oleh [ADR-004-BACKEND-AI-INFERENCE.md](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-004-BACKEND-AI-INFERENCE.md) dengan status SUPERSEDED oleh ADR-014).
+

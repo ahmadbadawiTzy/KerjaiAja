@@ -1,94 +1,209 @@
 # Arsitektur Data (Data Architecture) — KerjaiAja
+## Hybrid Offline-First Persistence · Room Database + Supabase PostgreSQL
 
-Dokumen ini menjelaskan perancangan data relasional lokal (Room), pencarian teks penuh (SQLite FTS), penyimpanan preferensi (DataStore), serta strategi sinkronisasi opsional dengan Supabase.
+Dokumen ini mendefinisikan arsitektur data **KerjaiAja** pasca-rebaseline arsitektur hybrid.
 
----
-
-## 1. Skema Basis Data Lokal (Room Database)
-
-Basis data lokal menggunakan SQLite yang dibungkus oleh **Room Persistence Library**.
-
-### 1.1 Entitas Inti (Core Entities)
-
-#### 1. `subjects` (Mata Kuliah / Pelajaran)
-- `id`: UUID (Primary Key, String)
-- `code`: String (Kode MK, misal: "IF2104")
-- `name`: String (Nama Mata Kuliah)
-- `lecturer_name`: String (Nama Dosen/Pengampu)
-- `color_hex`: String (Kode warna penanda tampilan)
-- `schedule_day`: Int (Hari pertemuan mingguan, 1-7)
-- `schedule_time`: String (Waktu pertemuan)
-- `classroom_or_link`: String (Ruang kelas fisik / link meeting daring)
-- `created_at`: Long (Timestamp epoch ms)
-- `updated_at`: Long (Timestamp epoch ms)
-
-#### 2. `tasks` (Tugas Akademik)
-- `id`: UUID (Primary Key, String)
-- `subject_id`: UUID (Foreign Key ke `subjects.id`, OnDelete CASCADE)
-- `title`: String (Judul tugas)
-- `description`: String (Deskripsi/instruksi tugas)
-- `due_date`: Long (Timestamp batas pengumpulan)
-- `priority`: String (LOW, MEDIUM, HIGH, URGENT)
-- `status`: String (TODO, IN_PROGRESS, IN_REVIEW, DONE)
-- `task_type`: String (INDIVIDUAL, GROUP, EXAM_PREP)
-- `estimated_minutes`: Int (Estimasi durasi pengerjaan)
-- `is_ai_assisted`: Boolean (Menandai apakah tugas di-breakdown via AI)
-- `created_at`: Long (Timestamp)
-- `updated_at`: Long (Timestamp)
-
-#### 3. `subtasks` (Sub-langkah Hasil Breakdown)
-- `id`: UUID (Primary Key, String)
-- `task_id`: UUID (Foreign Key ke `tasks.id`, OnDelete CASCADE)
-- `order_index`: Int (Urutan pengerjaan sub-tugas)
-- `title`: String (Aksi konkret sub-tugas)
-- `assigned_to`: String? (Nama anggota kelompok jika tugas kelompok)
-- `is_completed`: Boolean (Status selesai)
-- `completed_at`: Long? (Waktu penyelesaian)
-
-#### 4. `submission_checklists` (Daftar Periksa Pengumpulan)
-- `id`: UUID (Primary Key, String)
-- `task_id`: UUID (Foreign Key ke `tasks.id`, OnDelete CASCADE)
-- `item_text`: String (Kriteria periksa, misal: "Format PDF < 5MB")
-- `is_checked`: Boolean (Status validasi pengguna)
-- `category`: String (FORMAT, CONTENT, ATTACHMENT, METADATA)
-
-#### 5. `academic_notes` (Catatan Konteks & Silabus)
-- `id`: UUID (Primary Key, String)
-- `subject_id`: UUID (Foreign Key ke `subjects.id`, OnDelete CASCADE)
-- `title`: String (Judul catatan/materi)
-- `content`: String (Teks catatan materi atau ringkasan silabus)
-- `created_at`: Long
-- `updated_at`: Long
+Persistensi data mengadopsi prinsip **Local-Write-First**: Room Database lokal menjadi sumber kebenaran instan (*Immediate Source of Truth*), sedangkan Supabase PostgreSQL berfungsi sebagai backend cloud terpusat untuk sinkronisasi multi-device dan kolaborasi tim.
 
 ---
 
-## 2. SQLite Full-Text Search (FTS4/FTS5)
+## 1. Paradigma Penyimpanan Data Hybrid
 
-Untuk mendukung kemampuan pencarian berkecepatan tinggi dan penyusunan konteks RAG lokal (*Local Retrieval-Augmented Generation*), Room dikonfigurasi dengan tabel virtual FTS:
-
-- **Tabel Virtual:** `academic_notes_fts`
-- **Tujuan:** Mengindeks seluruh teks pada `academic_notes` dan deskripsi `tasks`.
-- **Penggunaan:** Ketika pengguna meminta asisten AI memecah tugas atau merangkum materi, query FTS dijalankan untuk mengambil potongan paragraf materi yang paling relevan dengan instruksi tugas dalam hitungan milidetik (*sub-millisecond retrieval*), yang kemudian diinjeksikan ke dalam prompt konteks lokal.
-
----
-
-## 3. DataStore Preferences (Konfigurasi & AI State)
-
-Pengaturan non-relasional dan metadata sistem disimpan dalam **Jetpack DataStore Preferences**:
-
-- `ai_model_status`: Status ketersediaan model lokal (`NOT_DOWNLOADED`, `DOWNLOADING`, `VERIFYING`, `READY`, `ERROR`).
-- `ai_model_sha256`: Hash integritas model yang terpasang.
-- `ai_model_path`: Jalur berkas biner model di internal storage.
-- `user_theme_mode`: Preferensi tema tampilan (System, Light, Dark).
-- `supabase_sync_enabled`: Status apakah pengguna mengaktifkan sinkronisasi cloud.
-- `last_sync_timestamp`: Waktu terakhir sinkronisasi sukses.
+1. **Room Database (Local-First Canonical Storage):**  
+   Seluruh data tugas, sub-tugas, mata pelajaran, dan tim disimpan secara lokal di SQLite Room. Operasi baca dan tulis berjalan instan dalam milidetik tanpa menunggu koneksi internet.
+2. **UUID Identifiers:**  
+   Semua entitas menggunakan UUID string (format v4) sebagai Primary Key, memungkinkan pembuatan record secara offline tanpa risiko tabrakan ID dengan server cloud.
+3. **Pending Sync Queue (`sync_pending_queue`):**  
+   Setiap mutasi lokal dicatat dalam antrean sinkronisasi untuk dikirim ke Supabase PostgREST saat online.
+4. **Soft Deletion (`deleted_at` Tombstone):**  
+   Penghapusan data menggunakan timestamp `deleted_at` agar perubahan status hapus dapat disinkronkan secara konsisten ke seluruh perangkat.
+5. **Local RAG Index via SQLite FTS5:**  
+   Tabel virtual FTS5 (`tasks_fts`) untuk pencarian leksikal cepat BM25 langsung di perangkat lokal.
 
 ---
 
-## 4. Penataan Sinkronisasi Supabase (Opsional)
+## 2. Skema Basis Data Lokal (Room Database)
 
-Jika pengguna mengaktifkan fitur pencadangan cloud:
-- Skema PostgreSQL di Supabase merefleksikan skema Room dengan skema UUID yang identik.
-- Pengguna diotentikasi via **Supabase Auth** (email atau anonymous).
-- **Row-Level Security (RLS)** diterapkan ketat: pengguna hanya dapat membaca dan menulis data yang memiliki `user_id = auth.uid()`.
-- Konflik sinkronisasi (*conflict resolution*) diselesaikan dengan strategi *Last-Write-Wins* berbasis `updated_at` atau *Client-Wins* untuk menjaga integritas data lokal pengguna.
+### 2.1 Entitas Mata Kuliah (`subjects`)
+```kotlin
+@Entity(tableName = "subjects")
+data class SubjectEntity(
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val userId: String,                  // "local_guest_..." atau Supabase Auth UID
+    val name: String,                    // Contoh: "Algoritma & Struktur Data"
+    val code: String? = null,            // Contoh: "IF2104"
+    val colorHex: String = "#1E293B",    // Bauhaus Dark Slate
+    val instructorName: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val deletedAt: Long? = null,
+    val version: Int = 1
+)
+```
+
+### 2.2 Entitas Tugas Akademik (`tasks`)
+```kotlin
+@Entity(
+    tableName = "tasks",
+    foreignKeys = [
+        ForeignKey(
+            entity = SubjectEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["subjectId"],
+            onDelete = ForeignKey.SET_NULL
+        )
+    ],
+    indices = [Index(value = ["subjectId"]), Index(value = ["deadline"]), Index(value = ["status"])]
+)
+data class TaskEntity(
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val userId: String,
+    val subjectId: String? = null,
+    val title: String,
+    val description: String? = null,
+    val deadline: Long,                   // Timestamp epoch milidetik
+    val estimatedMinutes: Int = 60,
+    val difficulty: Int = 3,              // 1 (Mudah) - 5 (Sangat Sulit)
+    val gradeWeight: Double = 10.0,       // Kontribusi nilai (%)
+    val isCompleted: Boolean = false,
+    val completedAt: Long? = null,
+    val deterministicPriority: Int = 50,  // 0 - 100 dari Deterministic Engine
+    val userPriorityOverride: String? = null,
+    val status: String = "TODO",          // TODO, IN_PROGRESS, COMPLETED, OVERDUE
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val deletedAt: Long? = null,
+    val version: Int = 1
+)
+```
+
+### 2.3 Entitas Sub-Tugas (`subtasks`)
+```kotlin
+@Entity(
+    tableName = "subtasks",
+    foreignKeys = [
+        ForeignKey(
+            entity = TaskEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["taskId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index(value = ["taskId"])]
+)
+data class SubtaskEntity(
+    @PrimaryKey val id: String = UUID.randomUUID().toString(),
+    val taskId: String,
+    val title: String,
+    val isCompleted: Boolean = false,
+    val sortOrder: Int = 0,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val deletedAt: Long? = null
+)
+```
+
+### 2.4 Antrean Sinkronisasi Mutasi Lokal (`sync_pending_queue`)
+```kotlin
+@Entity(tableName = "sync_pending_queue")
+data class SyncQueueEntity(
+    @PrimaryKey(autoGenerate = true) val queueId: Long = 0,
+    val entityType: String,              // "TASK", "SUBJECT", "SUBTASK", "TEAM_TASK"
+    val entityId: String,                // UUID string
+    val operation: String,               // "INSERT", "UPDATE", "DELETE"
+    val payloadJson: String,             // JSON snapshot
+    val createdAt: Long = System.currentTimeMillis(),
+    val retryCount: Int = 0,
+    val lastError: String? = null
+)
+```
+
+### 2.5 Tabel Virtual SQLite FTS5 (`tasks_fts` & `academic_fts`)
+```sql
+-- Domain A: Productivity Knowledge
+CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
+    title,
+    description,
+    subject_name,
+    content='tasks',
+    content_rowid='rowid',
+    tokenize='unicode61 remove_diacritics 1'
+);
+
+-- Domain B: Academic Knowledge
+CREATE TABLE IF NOT EXISTS academic_chunks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chunk_id TEXT UNIQUE NOT NULL,
+    document_id TEXT NOT NULL,
+    owner_id TEXT NOT NULL,
+    domain TEXT NOT NULL CHECK(domain IN ('PRODUCTIVITY', 'ACADEMIC')),
+    section_title TEXT NOT NULL,
+    page_number INTEGER,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    category TEXT,
+    source_reference TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    quality_score REAL DEFAULT 1.0,
+    is_published INTEGER DEFAULT 1
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS academic_fts USING fts5(
+    section_title,
+    content,
+    subject,
+    category,
+    keywords,
+    content='academic_chunks',
+    content_rowid='id',
+    tokenize='unicode61 remove_diacritics 1'
+);
+```
+
+---
+
+## 3. Skema Basis Data Cloud (Supabase PostgreSQL)
+
+Skema database cloud di Supabase PostgreSQL memiliki struktur tabel relasional yang menyatukan kebutuhan aplikasi Android dan Web Admin CMS:
+- **Tabel Aplikasi Android:** `profiles`, `subjects`, `tasks`, `subtasks`, `teams`, `team_members`, `team_tasks`. Diproteksi menggunakan **Row Level Security (RLS)** dengan klausa `auth.uid() = user_id`.
+- **Tabel Kurikulum & Referensi (Dikelola CMS, Dibaca Android):** `academic_references` dan `curriculum_topics`. Memungkinkan pembaruan silabus 12 mata pelajaran secara live via Delta Sync.
+- **Tabel Dukungan & Keluhan:** `user_feedbacks` (dibuat di Android, direspon di CMS).
+- **Tabel Tata Kelola Admin:** `admin_roles` dan `admin_audit_logs`.
+
+---
+
+## 4. Siklus Hidup Sinkronisasi & Migrasi Akun
+
+```mermaid
+stateDiagram-v2
+    [*] --> GuestMode: Buka Aplikasi Pertama Kali
+    GuestMode --> LocalDatabase: Tulis Tugas (userId = local_guest_uuid)
+    LocalDatabase --> SyncQueue: Catat ke sync_pending_queue
+    
+    GuestMode --> Authenticated: Pengguna Login / Sign Up Supabase
+    state Authenticated {
+        [*] --> MigrateGuestData: Transaksi Atomic Update userId
+        MigrateGuestData --> PushPendingMutations: SyncWorker Upload ke Cloud
+        PushPendingMutations --> PullRemoteChanges: Ambil Perubahan Cloud Terbaru
+        PullRemoteChanges --> [*]: Sinkronisasi Selesai
+    }
+```
+
+---
+
+## 5. Keamanan, Efisiensi & Kedaulatan Data
+
+1. **Efisiensi Database:** Record tugas rata-rata berukuran ~250 byte. Kapasitas 500 MB di Supabase PostgreSQL mampu menampung lebih dari 500,000 record tugas aktif.
+2. **Auto-Cleanup Tombstone:** Record yang telah ditandai `deleted_at` selama lebih dari 30 hari dibersihkan dari penyimpanan lokal dan cloud via scheduled vacuum.
+3. **Pemisahan Penyimpanan Model AI:** Model bobot Gemma disimpan secara eksklusif di sandbox privat perangkat (`context.noBackupFilesDir/models/`) dan tidak pernah diunggah ke database atau storage cloud.
+4. **Isolasi Terhadap Data Lokal Room:** Web Admin CMS tidak memiliki saluran langsung ke database Room Android. Seluruh pembaruan data masuk melalui protokol sinkronisasi resmi Supabase.
+5. **Kedaulatan Konten Privat Mahasiswa:** RLS PostgreSQL memblokir seluruh akun admin dari membaca tabel `tasks` dan `subtasks` personal milik mahasiswa (anti-surveillance).
+
+---
+
+## 6. Referensi Putusan Arsitektur Terkait
+
+- [ADR-022: Offline-First Sync & Conflict Resolution](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-022-OFFLINE-FIRST-SYNC-CONFLICT-RESOLUTION.md)
+- [ADR-038: Shared Database Schema & Multi-Tenant RLS for CMS](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-038-SHARED-DATABASE-SCHEMA-AND-CMS-RLS.md)
+

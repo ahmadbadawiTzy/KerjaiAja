@@ -1,51 +1,40 @@
 # Arah Desain Antarmuka (Design Direction) — KerjaiAja
 
-Dokumen ini menjelaskan pedoman desain visual, sistem desain UI, dan prinsip pengalaman pengguna (*User Experience*) untuk **KerjaiAja**.
+Dokumen ini menetapkan arah visi visual, prinsip estetika, dan pendekatan pengalaman pengguna (*User Experience*) untuk **KerjaiAja** pasca-rebaseline arsitektur penuh (Full Architecture Rebaseline 2026-11-20), mengadopsi bahasa desain **Neo-Bauhaus × Contemporary Gen Z × Professional Academic Productivity**.
 
 ---
 
-## 1. Filosofi & Karakter Desain
+## 1. Filosofi & Identitas Visual
 
-- **Karakter Produk:** **Profesional, Terfokus, dan Berwawasan Akademik.**
-- **Anti-Gimmick & Anti-Slop:** Menghindari elemen gamifikasi kekanak-kanakan (karakter kartun berlebihan, efek suara berisik, atau lencana palsu) yang justru mengalihkan fokus belajar.
-- **Tinggi Keterbacaan (*High Legibility*):** Tata letak dioptimalkan untuk membaca teks instruksi tugas panjang, tenggat waktu, dan checklist terstruktur dengan cepat.
-- **Ergonomi Satu Tangan (*One-Hand Usability*):** Komponen interaksi utama (tombol tambah tugas, filter, navigasi) ditempatkan di zona jangkauan jempol bawah layar (*bottom-weighted navigation*).
+KerjaiAja memadukan ketegasan fungsional dari gerakan Bauhaus abad ke-20 dengan kepekaan estetika kontemporer generasi Z yang dinamis:
 
----
-
-## 2. Sistem Desain: Google Material 3 (Material You)
-
-Aplikasi dibangun penuh di atas spesifikasi **Material Design 3 (M3)**:
-
-### 2.1 Palet Warna & Warna Dinamis (Dynamic Color)
-- Mendukung fitur **Dynamic Theming** (Material You) pada Android 12+ (API 31+), menyelaraskan palet warna aplikasi dengan wallpaper pengguna.
-- Untuk Android 10–11 (API 29–30), aplikasi menggunakan palet warna standar berbasis nada biru-keabuan (*academic slate blue*) yang tenang dan berwibawa:
-  - **Primary:** Deep Slate Blue (`#1E3A8A` / `#93C5FD` di Dark Mode)
-  - **Secondary:** Muted Teal (`#0D9488` / `#5EEAD4` di Dark Mode)
-  - **Surface & Background:** Bersih dengan elevasi tonal halus tanpa bayangan tebal.
-  - **Error & Urgency:** Coral Red terkalibrasi (`#DC2626` / `#F87171`) khusus untuk penanda deadline mendesak.
-
-### 2.2 Tipografi
-- Menggunakan font sistem Android modern yang bersih dan proporsional (**Roboto / Google Sans**).
-- Skala tipe M3 yang disiplin:
-  - `Headline Small/Medium`: Judul layar dan nama mata kuliah.
-  - `Title Medium`: Judul tugas dan kartu utama.
-  - `Body Medium/Large`: Teks instruksi tugas dan materi catatan.
-  - `Label Large/Small`: Tag mata kuliah, indikator status, dan badge deadline.
-
-### 2.3 Dark Mode
-- Dukungan penuh untuk mode gelap (*Dark Theme*) dengan warna latar abu-abu gelap pekat (bukan hitam absolut OLED menyilaukan) untuk kenyamanan belajar di malam hari tanpa kelelahan mata (*eye strain*).
+1. **Form Follows Function (Bentuk Mengikuti Fungsi):**  
+   Setiap elemen visual dirancang untuk tujuan tertentu: mengomunikasikan batas waktu tugas, menjelaskan alasan prioritas, dan mempermudah kolaborasi kelompok. Desain menolak keras ornamen dangkal atau animasi lambat yang menghambat produktivitas.
+2. **Anti-Gimmick & Anti-Guilt:**  
+   Menolak sistem gamifikasi manipulatif (seperti maskot yang sedih ketika pengguna tidak membuka aplikasi) dan alarm histeris yang memicu rasa bersalah (*academic anxiety*). KerjaiAja adalah alat bantu kerja yang menghargai kesehatan mental mahasiswa.
+3. **Keterbacaan Ekstrem (Extreme Legibility):**  
+   Mengutamakan tipografi Inter dengan kontras tinggi, hierarki ukuran tegas, dan angka tabular untuk timer dan batas waktu, menjamin kenyamanan navigasi cepat di bawah terik matahari kampus maupun di ruang perpustakaan temaram.
+4. **Sentuhan Kontemporer (Neo-Bauhaus Energy):**  
+   Memadukan kanvas warm off-white yang nyaman dengan aksen warna primer berani (*Electric Cobalt Blue*, *Bauhaus Amber*, dan *Crimson Urgency*) serta kontur border geometris yang tegas.
 
 ---
 
-## 3. Komponen Utama & Interaksi Mikro
+## 2. Pilar Pengalaman Pengguna (UX Pillars)
 
-1. **Task Card yang Terstruktur:**  
-   Kartu tugas menampilkan informasi penting secara ringkas: kode mata kuliah, judul tugas, tenggat waktu (dengan warna adaptif sesuai urgensi), dan bilah progres sub-tugas.
-2. **Breakdown Stepper Interaktif:**  
-   Visualisasi berurutan untuk sub-langkah tugas, dengan *checkbox* animasi halus yang memberikan kepuasan psikologis saat menyelesaikan langkah kerja.
-3. **Floating Bottom Navigation & Action Bar:**  
-   Navigasi bawah yang ramping untuk perpindahan cepat antara Tugas, Mata Kuliah, Jadwal Belajar, dan Asisten AI.
-4. **Aksesibilitas (Accessibility Standards):**
-   - Target sentuh minimal: **48 x 48 dp** untuk semua tombol dan ikon interaktif.
-   - Rasio kontras teks minimal **4.5:1** terhadap latar belakang sesuai pedoman WCAG AA.
+### 2.1 Ergonomi Satu Tangan (One-Hand Bottom Ergonomics)
+Seluruh tombol aksi utama (tombol tambah tugas, filter urgensi, navigasi antar pilar) diposisikan di zona jangkauan jempol bawah layar (*bottom-weighted interaction*), memudahkan pengoperasian satu tangan saat mahasiswa sedang berjalan di lorong kampus.
+
+### 2.2 Umpan Balik Taktil yang Memuaskan (Satisfying Micro-Interactions)
+- Saat sub-tugas ditandai selesai, sistem memberikan respons haptik mikro (*haptic click*) dan animasi garis coret (*strikethrough*) geometris instan.
+- Bilah progres tugas diperbarui secara halus dengan transisi kurva interpolasi Material 3 FastOutSlowIn.
+
+### 2.3 Transparansi Penalaran (Explainable & Contextual)
+Antarmuka tidak pernah menampilkan angka prioritas misterius tanpa keterangan. Mahasiswa dapat menyentuh badge urgensi untuk melihat kartu penjelasan yang menguraikan bobot waktu, bobot nilai, dan catatan AI dalam 3 baris poin yang mudah dicerna.
+
+---
+
+## 3. Sistem Desain Rinci & Integrasi Skill
+
+Spesifikasi detail mengenai token warna, skala tipografi Inter, ukuran grid, bentuk sudut, serta implementasi komponen Jetpack Compose diatur secara komprehensif dalam:
+- [`docs/design/DESIGN_SYSTEM.md`](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/design/DESIGN_SYSTEM.md)
+- Skill lokal: `.agents/skills/bauhaus-design/`

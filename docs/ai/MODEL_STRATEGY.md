@@ -1,58 +1,98 @@
-# Strategi Model AI (Model Strategy) — KerjaiAja
+# Strategi Pemilihan Model AI On-Device (On-Device Model Strategy) — KerjaiAja
+## Google Gemma 3 1B IT & Gemma 270M · Hardware Tiering · Zero External AI API
 
-Dokumen ini menjelaskan strategi pemilihan model bahasa alami, runtime eksekusi, serta metodologi adaptasi kecerdasan buatan on-device untuk **KerjaiAja**.
-
----
-
-## 1. Pemilihan Model & Runtime
-
-### 1.1 Kandidat Model Utama: Gemma 3 1B IT
-- **Karakter:** Model berukuran 1 miliar parameter (*1 Billion parameter instruction-tuned*) dari Google DeepMind.
-- **Justifikasi Pemilihan:**
-  - Menawarkan rasio penalaran terhadap konsumsi memori yang sangat kompetitif untuk tugas-tugas penstrukturan, peringkasan, dan pembuatan daftar (*task decomposition & outlining*).
-  - Bobot terkuantisasi (4-bit / INT4) memiliki ukuran berkas sekitar 600–900 MB, memungkinkan pengunduhan on-demand yang realistis pada perangkat seluler.
-  - Memiliki pemahaman instruksi bahasa Indonesia dan Inggris yang memadai untuk domain akademik.
-
-### 1.2 Kandidat Runtime Inferensi: LiteRT-LM
-- **Platform:** Google AI Edge LiteRT (sebelumnya TensorFlow Lite) khusus Large Language Models.
-- **Justifikasi Pemilihan:**
-  - Integrasi native dengan ekosistem Android Native (C++/Java/Kotlin bindings).
-  - Dukungan akselerasi perangkat keras via GPU (OpenCL/Vulkan) dan CPU multithreading modern.
-  - Alokasi memori yang terprediksi dan efisien untuk perangkat *memory-constrained*.
-
-### 1.3 Alternatif Pendukung: Gemini Nano via ML Kit GenAI
-- Pada perangkat flagship/terbaru yang memiliki dukungan native Android AICore (misal: Pixel, Galaxy kelas atas), aplikasi dapat secara opsional memanfaatkan API **Gemini Nano** via ML Kit GenAI, menghilangkan kebutuhan untuk mengunduh bobot model mandiri.
+Dokumen ini mendefinisikan strategi pemilihan model on-device (**On-Device AI Model Strategy**), kebutuhan sumber daya perangkat bergerak, dan tata kelola distribusi model pada platform **KerjaiAja** pasca-rebaseline arsitektur hybrid.
 
 ---
 
-## 2. Matriks Keputusan: Terkonfirmasi vs. Asumsi Riset
+## 1. Filosofi & Batasan AI On-Device
 
-Penting untuk memisahkan keputusan arsitektural yang telah terkonfirmasi dari asumsi yang masih membutuhkan pengujian perangkat fisik (*device benchmarking*):
-
-| Aspek / Parameter | Status Keputusan | Detail & Catatan Validasi |
-| :--- | :---: | :--- |
-| **Arsitektur On-Device** | ✅ **Terkonfirmasi** | Inferensi wajib berjalan lokal di perangkat pengguna. |
-| **Tanpa Kewajiban Cloud AI API** | ✅ **Terkonfirmasi** | Tidak ada API OpenAI/Claude berbayar yang wajib bagi pengguna. |
-| **Tanpa Server VPS Inferensi** | ✅ **Terkonfirmasi** | Tidak menyewa atau mewajibkan server backend untuk pemrosesan LLM. |
-| **Aplikasi Tetap Fungsional Tanpa AI** | ✅ **Terkonfirmasi** | Fitur inti non-AI (Task, Subject, Checklist) 100% mandiri. |
-| **Min Android API 29 (Android 10)** | ✅ **Terkonfirmasi** | Batas minimum SDK untuk kompatibilitas runtime modern. |
-| **Prioritas Prompt Eng. & RAG** | ✅ **Terkonfirmasi** | Menolak fine-tuning di awal; memaksimalkan SQLite FTS + Context. |
-| **Kelayakan Kuantisasi Gemma 3 1B IT** | 🔬 *Asumsi / Perlu Riset* | Perlu diuji: apakah kuantisasi 4-bit mempertahankan akurasi format JSON sub-tugas. |
-| **Stabilitas RAM 4–6 GB** | 🔬 *Asumsi / Perlu Riset* | Perlu diuji di perangkat fisik 4GB RAM: apakah background process OS memicu LMK (Low Memory Killer). |
-| **Kecepatan Inferensi (Tokens/sec)** | 🔬 *Asumsi / Perlu Riset* | Target >= 8-12 tokens/detik pada chipset mid-range (misal: Snapdragon 6/7 series atau Dimensity 700/8000). |
-| **Dukungan ML Kit GenAI Gemini Nano** | 🔬 *Asumsi / Perlu Riset* | Aksesibilitas API Gemini Nano pada perangkat non-Pixel masih terbatas dan bervariasi per vendor. |
+1. **Dual Experience:** Mode A (Produktivitas Penuh Tanpa AI) adalah fondasi utama; Mode B (Asisten Kerja On-Device Gemma) adalah kapabilitas tambahan opsional bagi perangkat yang memenuhi syarat.
+2. **Target Biaya Rp0 & Privasi Penuh:** Tidak ada server inferensi cloud, tidak ada panggilan ke Gemini API, OpenAI API, Anthropic, atau Groq. Nol byte data tugas yang dikirim ke cloud untuk AI.
+3. **Bukan Chatbot Generik:** AI difokuskan secara kontekstual pada 5 use case produktivitas (*Ask About My Work*, *Task Breakdown*, *Smart Planning*, *Contextual Recommendations*, *Work Review*).
+4. **Pemisahan Bobot Model & Zero Supabase Storage:** Model bobot **DILARANG** disimpan di Supabase Storage untuk menjaga kuota Free Tier ($0). Bobot model diunduh langsung dari CDN resmi Google AI Edge / Hugging Face.
 
 ---
 
-## 3. Metodologi Adaptasi: Prompt Engineering & Local RAG
+## 2. Matriks Kandidat Model Google Gemma
 
-Pendekatan adaptasi kecerdasan buatan dilakukan melalui **rekayasa prompt terstruktur** dan **Retrieval-Augmented Generation (RAG) lokal**, bukan fine-tuning bobot model:
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                      KERJAIAJA ON-DEVICE MODEL MATRIX                  │
+├──────────────────────────┬───────────┬──────────────┬──────────────────┤
+│ Model                    │ Parameter │ Format       │ Peran Sistem     │
+├──────────────────────────┼───────────┼──────────────┼──────────────────┤
+│ 1. Gemma 3 1B IT         │ ~1.0 B    │ .litertlm    │ Kandidat Utama   │
+│ 2. Gemma 270M            │ ~270 M    │ .litertlm    │ Kandidat Ringan  │
+│ 3. EmbeddingGemma 2      │ ~300 M    │ .tflite      │ Evaluasi RAG V2  │
+└──────────────────────────┴───────────┴──────────────┴──────────────────┘
+```
 
-1. **Rekayasa Prompt Terstruktur:**
-   - Menyediakan template prompt sistem (*system prompt*) dengan peran yang sangat spesifik: *"Asisten pemecah tugas akademik"*.
-   - Mewajibkan format keluaran dalam skema JSON yang kaku (*constrained decoding* atau *JSON schema enforcement*), memudahkan parsing ke objek Kotlin.
-2. **Local RAG via SQLite FTS:**
-   - Mengambil intisari catatan materi yang tersimpan di Room database lokal.
-   - Menggabungkan materi tersebut sebagai blok konteks `[KONTEKS MATERI]` di dalam prompt, sehingga rekomendasi sub-tugas relevan dengan silabus mata kuliah tanpa memperbesar ukuran model.
-3. **Penolakan Fine-Tuning Dini:**
-   - Fine-tuning membutuhkan dataset khusus berskala besar, biaya komputasi tinggi, dan menyulitkan distribusi pembaruan model. Strategi ini ditolak hingga efektivitas RAG lokal terbukti tidak mencukupi.
+### 2.1 Google Gemma 3 1B IT — Kandidat Utama (Primary Target Candidate)
+- **Karakteristik:** Compact Instruction-Tuned Transformer dari Google DeepMind.
+- **Format:** LiteRT-LM (`.litertlm` quantized INT4).
+- **Rasional Pemilihan:**
+  - Kemampuan penalaran instruksi akademik sangat baik dalam bahasa Indonesia.
+  - Kepatuhan skema JSON terstruktur $\ge 97\%$.
+  - Ukuran berkas terkuantisasi INT4 berkisar **~750 – 950 MB**, dengan konsumsi RAM runtime **~850 MB – 1.15 GB**.
+  - Ditargetkan untuk perangkat kategori **`RECOMMENDED`** (RAM fisik $\ge 6\text{ GB}$, RAM bebas $\ge 2.5\text{ GB}$).
+
+### 2.2 Google Gemma 270M — Kandidat Ultra-Ringan (Ultra-Lightweight Candidate)
+- **Karakteristik:** Dense Nano Transformer 270 Juta Parameter.
+- **Rasional Pemilihan:**
+  - Ditujukan untuk perangkat kategori **`LIMITED`** (RAM fisik 4 GB, RAM bebas $1.2 - 2.5\text{ GB}$).
+  - Ukuran biner sangat kecil (**~250 – 350 MB**) dengan konsumsi RAM runtime **~350 – 500 MB**.
+  - Mengizinkan mahasiswa dengan ponsel entry-level untuk menjalankan dekomposisi tugas dasar tanpa risiko OOM crash.
+
+### 2.3 EmbeddingGemma 2 — Kandidat Semantic Retrieval (Evaluasi Tahap 2)
+- **Karakteristik:** Dense embedding model ~300M parameter untuk vector search.
+- **Rasional Pemilihan:**
+  - Dievaluasi untuk pencarian semantik tingkat lanjut pasca-MVP v1.0.
+  - Pada MVP v1.0, sistem mengandalkan **SQLite FTS5 BM25** yang efisien, instan (< 25 ms), dan tidak menambah beban RAM.
+
+---
+
+## 3. Matriks Kebutuhan Sumber Daya Perangkat (Hardware Footprint)
+
+| Parameter Perangkat | Mode A (Tanpa AI) | Mode B: Gemma 270M (`LIMITED`) | Mode B: Gemma 3 1B (`RECOMMENDED`) |
+| :--- | :---: | :---: | :---: |
+| **RAM Fisik Minimum** | **2 GB RAM** | **4 GB RAM** | **6 GB RAM** |
+| **RAM Bebas Minimum** | $\ge 200\text{ MB}$ | $\ge 1.2\text{ GB}$ | $\ge 2.5\text{ GB}$ |
+| **Ruang Disk Bebas** | $\ge 100\text{ MB}$ | $\ge 2.0\text{ GB}$ | $\ge 3.5\text{ GB}$ |
+| **Akselerator CPU/GPU** | CPU murni | CPU (2–4 threads) | GPU (OpenCL/Vulkan) / NPU |
+| **Konsumsi Puncak RAM** | ~70–90 MB | ~450 MB | ~1.150 MB |
+| **Durasi Inferensi** | < 1 ms (Instant) | ~1.5 – 3.0 detik | ~2.0 – 4.0 detik |
+
+---
+
+## 4. Kebijakan Distribusi & Tata Kelola Model
+
+1. **Zero External AI API:** Dilarang menggunakan Gemini API, OpenAI API, Anthropic API, Groq, atau server AI eksternal apa pun.
+2. **Penyimpanan Sandbox Terisolasi:** Berkas model disimpan di direktori privat aplikasi `context.noBackupFilesDir/models/` dengan validasi checksum SHA-256.
+3. **Hak Kendali Pengguna:** Pengguna dapat mengunduh atau menghapus model sewaktu-waktu di menu Pengaturan tanpa mengganggu data tugas pribadi.
+
+---
+
+## 5. Integrasi Pipeline Progresif & Tata Kelola Memori
+
+Sesuai dengan **ADR-033** dan **ADR-034**:
+
+1. **Pemanggilan Model Hanyalah Tahap Akhir (Stage 5):**
+   Model AI tidak pernah dipanggil untuk sorting, validasi form, atau dekomposisi berbasis aturan deterministik. Lebih dari 90% interaksi diselesaikan di Stage 0–2.
+2. **Single Active Session Mutex:**
+   Model LiteRT-LM diisolasi di balik `Mutex`. Hanya satu sesi inferensi yang dapat aktif pada satu waktu. Jika ada permintaan kedua saat inferensi berlangsung, permintaan tersebut ditolak dengan status sibuk atau diantrekan secara elegan.
+3. **Lazy Loading & Auto-Unload:**
+   Model tidak pernah dimuat di memori saat boot aplikasi. Instance model dilepaskan secara otomatis jika tidak ada aktivitas selama 5 menit (`idleTimeoutMillis = 300_000L`).
+4. **Respon Cepat LMK:**
+   Model segera melepaskan bobot saat menerima sinyal `onTrimMemory(TRIM_MEMORY_RUNNING_CRITICAL)` untuk mencegah terminasi paksa OS.
+
+---
+
+## 6. Referensi Putusan Arsitektur Terkait
+
+- [ADR-014: On-Device AI via LiteRT-LM & Google Gemma](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-014-ON-DEVICE-AI-LITERTLM-GEMMA.md)
+- [ADR-022: Photo Question Solver Architecture with Dual Pipeline](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-022-PHOTO-QUESTION-SOLVER-ARCHITECTURE.md)
+- [ADR-033: Progressive AI Processing Pipeline](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-033-PROGRESSIVE-AI-PROCESSING-PIPELINE.md)
+- [ADR-034: On-Device Model Lifecycle & Memory Management](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-034-ON-DEVICE-MODEL-LIFECYCLE-AND-MEMORY-MANAGEMENT.md)
+- [ADR-035: Per-Model Device Capability Evaluation](file:///home/ahmadbadawi/Documents/CodinganKu/Android/KerjaiAja/docs/decisions/adr/ADR-035-PER-MODEL-DEVICE-CAPABILITY-EVALUATION.md)
+
